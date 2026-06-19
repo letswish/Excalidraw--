@@ -1,13 +1,51 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
-import { Excalidraw, MainMenu } from "@excalidraw/excalidraw";
+import {
+  Excalidraw,
+  MainMenu,
+  useHandleLibrary
+} from "@excalidraw/excalidraw";
+import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import "@excalidraw/excalidraw/index.css";
+import {
+  LIBRARY_RETURN_URL,
+  LIBRARY_WINDOW_NAME,
+  type LibraryPersistedData
+} from "../../shared/library";
 import "./styles.css";
 
-ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-  <React.StrictMode>
+window.name = LIBRARY_WINDOW_NAME;
+
+const libraryPersistenceAdapter = {
+  load: () => window.excalidrawDesktop.libraries.load(),
+  save: (data: LibraryPersistedData) =>
+    window.excalidrawDesktop.libraries.save(data)
+};
+
+const App = (): React.JSX.Element => {
+  const [excalidrawAPI, setExcalidrawAPI] =
+    useState<ExcalidrawImperativeAPI | null>(null);
+
+  useHandleLibrary({
+    excalidrawAPI,
+    adapter: libraryPersistenceAdapter
+  });
+
+  useEffect(() => {
+    return window.excalidrawDesktop.libraries.onInstall((hash) => {
+      const params = new URLSearchParams(hash.replace(/^#/, ""));
+      if (params.has("addLibrary")) {
+        window.location.hash = hash;
+      }
+    });
+  }, []);
+
+  return (
     <main className="app-shell">
-      <Excalidraw>
+      <Excalidraw
+        excalidrawAPI={setExcalidrawAPI}
+        libraryReturnUrl={LIBRARY_RETURN_URL}
+      >
         <MainMenu>
           <MainMenu.DefaultItems.LoadScene />
           <MainMenu.DefaultItems.SaveToActiveFile />
@@ -22,5 +60,11 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
         </MainMenu>
       </Excalidraw>
     </main>
+  );
+};
+
+ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+  <React.StrictMode>
+    <App />
   </React.StrictMode>
 );
