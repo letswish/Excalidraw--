@@ -15,6 +15,7 @@ import {
   type LibraryPersistedData
 } from "../shared/library";
 import { loadLibraryData, saveLibraryData } from "./libraryStore";
+import { registerDocumentIpc, resetDocumentSession } from "./documents";
 
 app.setPath(
   "userData",
@@ -22,6 +23,8 @@ app.setPath(
 );
 
 let mainWindow: BrowserWindow | null = null;
+
+registerDocumentIpc(() => mainWindow);
 
 const libraryReturnUrl = new URL(LIBRARY_RETURN_URL);
 
@@ -160,6 +163,7 @@ const createWindow = (): void => {
 
   mainWindow.on("closed", () => {
     mainWindow = null;
+    resetDocumentSession();
   });
 };
 

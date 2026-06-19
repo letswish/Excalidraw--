@@ -1,4 +1,5 @@
 import type { LibraryItems } from "@excalidraw/excalidraw/types";
+import type { DocumentBridge } from "./documents";
 
 export const APP_CONFIG_DIRECTORY_NAME = "excalidraw--";
 export const LIBRARY_DATA_FILENAME = "libraries.json";
@@ -17,6 +18,7 @@ export type LibraryPersistedData = {
 };
 
 export type ExcalidrawDesktopBridge = {
+  documents: DocumentBridge;
   libraries: {
     load: () => Promise<LibraryPersistedData | null>;
     save: (data: LibraryPersistedData) => Promise<void>;

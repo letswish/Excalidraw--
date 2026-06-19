@@ -41,3 +41,27 @@
   run confirmed the preload bridge and canvas load, IPC persistence round-trip,
   corrupt-file backup, and a mocked official callback being consumed by
   `useHandleLibrary` with the Library sidebar opened and callback hash removed.
+
+## Desktop document workflow and recent files
+
+- **Affected modules:** `src/renderer/src/main.tsx`, the local document dialogs
+  and styles, and the Electron main/preload document integration.
+- **Reason:** the embedded component's browser file handles do not expose the
+  stable absolute paths required for Electron recent-file history or a desktop
+  save-before-open workflow.
+- **Upstream surface:** `MainMenu` custom items; `UIOptions.canvasActions` for
+  disabling the built-in load/save actions; `loadFromBlob`, `serializeAsJSON`,
+  `initialData`, `ExcalidrawImperativeAPI`, and Excalidraw theme CSS variables.
+- **Local behavior:** Electron owns `.excalidraw` path access, active-document
+  saves, and `<userData>/recent-files.json`. The renderer validates a candidate
+  with `loadFromBlob`, compares serialized saved/current states, prompts before
+  discarding unsaved changes, and remounts Excalidraw with the restored scene.
+  Recent and confirmation dialogs reuse the upstream visual tokens without
+  importing private Excalidraw components.
+- **Upgrade risk:** future versions may change scene restoration or serialization
+  shapes, imperative API methods, menu composition, `initialData` semantics, or
+  the CSS variables used by the local dialogs. Recheck files with embedded
+  images, dirty-state comparisons, shortcuts, and both themes after upgrades.
+- **Verification:** `npm run build` passed. A production Electron DOM smoke test
+  confirmed the canvas, custom Open/Save/Recent menu entries, recent-files
+  dialog mounting and focus, and resolved Excalidraw background/radius tokens.
