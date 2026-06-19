@@ -1,5 +1,23 @@
 # Excalidraw Compatibility Notes
 
+## Arbitrary HTTP(S) web embeds
+
+- **Affected module:** `src/renderer/src/main.tsx`.
+- **Reason:** Excalidraw's default web-embed validator only accepts its built-in
+  domain allowlist, which requires upstream changes before other sites can be
+  embedded.
+- **Upstream surface:** the `Excalidraw` component's `validateEmbeddable` prop
+  and its iframe rendering and sandbox behavior.
+- **Local behavior:** the host supplies a validator that accepts any absolute
+  HTTP or HTTPS URL, including localhost, and rejects malformed URLs and other
+  protocols such as `file:`, `ftp:`, `javascript:`, and `data:`. A target site
+  can still prevent rendering through `X-Frame-Options` or CSP.
+- **Upgrade risk:** future Excalidraw versions may change the validator
+  signature, URL normalization, embed parsing, or iframe sandbox. Recheck the
+  custom validator and both newly created and restored embeds when upgrading.
+- **Verification:** `npm run build` passed. The validator accepted arbitrary
+  HTTP(S) origins and rejected non-web and malformed URLs.
+
 ## Online library installation and desktop persistence
 
 - **Affected modules:** `src/renderer/src/main.tsx`, the Electron main/preload

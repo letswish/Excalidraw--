@@ -22,6 +22,15 @@ const libraryPersistenceAdapter = {
     window.excalidrawDesktop.libraries.save(data)
 };
 
+const validateEmbeddableUrl = (url: string): boolean => {
+  try {
+    const { protocol } = new URL(url);
+    return protocol === "http:" || protocol === "https:";
+  } catch {
+    return false;
+  }
+};
+
 const App = (): React.JSX.Element => {
   const [excalidrawAPI, setExcalidrawAPI] =
     useState<ExcalidrawImperativeAPI | null>(null);
@@ -45,6 +54,7 @@ const App = (): React.JSX.Element => {
       <Excalidraw
         excalidrawAPI={setExcalidrawAPI}
         libraryReturnUrl={LIBRARY_RETURN_URL}
+        validateEmbeddable={validateEmbeddableUrl}
       >
         <MainMenu>
           <MainMenu.DefaultItems.LoadScene />
