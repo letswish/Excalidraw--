@@ -7,7 +7,8 @@ export type DocumentUiLabels = {
   recentEmpty: string;
   close: string;
   saveChangesTitle: string;
-  saveChangesDescription: (name: string) => string;
+  saveChangesBeforeOpenDescription: (name: string) => string;
+  saveChangesBeforeCloseDescription: (name: string) => string;
   save: string;
   dontSave: string;
   cancel: string;
@@ -195,14 +196,14 @@ export const RecentDocumentsDialog = ({
 };
 
 export const SaveChangesDialog = ({
-  documentName,
+  description,
   labels,
   busy,
   onSave,
   onDontSave,
   onCancel
 }: {
-  documentName: string;
+  description: string;
   labels: DocumentUiLabels;
   busy: boolean;
   onSave: () => void;
@@ -219,7 +220,7 @@ export const SaveChangesDialog = ({
       title={labels.saveChangesTitle}
     >
       <p className="save-changes-dialog__description">
-        {labels.saveChangesDescription(documentName)}
+        {description}
       </p>
       <div className="desktop-dialog-actions">
         <button

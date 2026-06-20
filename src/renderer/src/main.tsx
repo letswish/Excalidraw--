@@ -108,6 +108,15 @@ type LoadedDocument = {
   scene: Awaited<ReturnType<typeof loadFromBlob>>;
 };
 
+type PendingDocumentAction =
+  | {
+      type: "open";
+      document: LoadedDocument;
+    }
+  | {
+      type: "close";
+    };
+
 type AppLabels = DocumentUiLabels & {
   open: string;
   saveMenu: string;
@@ -129,8 +138,10 @@ const getLabels = (langCode: string): AppLabels => {
       recentEmpty: "还没有最近打开的 Excalidraw 文件",
       close: "关闭",
       saveChangesTitle: "保存更改？",
-      saveChangesDescription: (name) =>
+      saveChangesBeforeOpenDescription: (name) =>
         `“${name}”包含尚未保存的更改。是否在打开其他文件前保存？`,
+      saveChangesBeforeCloseDescription: (name) =>
+        `“${name}”包含尚未保存的更改。是否在关闭窗口前保存？`,
       save: "保存",
       dontSave: "不保存",
       cancel: "取消",
@@ -149,8 +160,10 @@ const getLabels = (langCode: string): AppLabels => {
     recentEmpty: "No recently opened Excalidraw files",
     close: "Close",
     saveChangesTitle: "Save changes?",
-    saveChangesDescription: (name) =>
+    saveChangesBeforeOpenDescription: (name) =>
       `“${name}” has unsaved changes. Save before opening another file?`,
+    saveChangesBeforeCloseDescription: (name) =>
+      `“${name}” has unsaved changes. Save before closing the window?`,
     save: "Save",
     dontSave: "Don't save",
     cancel: "Cancel",
@@ -177,8 +190,8 @@ const App = (): React.JSX.Element => {
   const [activeDocument, setActiveDocument] =
     useState<RecentDocument | null>(null);
   const [recentDialogOpen, setRecentDialogOpen] = useState(false);
-  const [pendingDocument, setPendingDocument] =
-    useState<LoadedDocument | null>(null);
+  const [pendingAction, setPendingAction] =
+    useState<PendingDocumentAction | null>(null);
   const [openingDocument, setOpeningDocument] = useState(false);
   const [confirmBusy, setConfirmBusy] = useState(false);
   const [documentBaselineReady, setDocumentBaselineReady] = useState(false);
@@ -264,6 +277,30 @@ const App = (): React.JSX.Element => {
     );
   }, [excalidrawAPI]);
 
+  const hasUnsavedChanges = useCallback((): boolean => {
+    const currentContents = serializeCurrentDocument();
+    return (
+      currentContents !== null &&
+      (baselineRef.current === null ||
+        currentContents !== baselineRef.current)
+    );
+  }, [serializeCurrentDocument]);
+
+  useEffect(() => {
+    return window.excalidrawDesktop.windowLifecycle.onCloseRequested(() => {
+      if (confirmBusy) {
+        return;
+      }
+
+      if (hasUnsavedChanges()) {
+        setRecentDialogOpen(false);
+        setPendingAction({ type: "close" });
+      } else {
+        window.excalidrawDesktop.windowLifecycle.confirmClose();
+      }
+    });
+  }, [confirmBusy, hasUnsavedChanges]);
+
   const saveCurrentDocument = useCallback(async (): Promise<boolean> => {
     if (!excalidrawAPI) {
       return false;
@@ -316,7 +353,7 @@ const App = (): React.JSX.Element => {
       setRecentDocuments((documents) =>
         promoteRecentDocument(documents, document)
       );
-      setPendingDocument(null);
+      setPendingAction(null);
       setRecentDialogOpen(false);
     },
     []
@@ -343,15 +380,10 @@ const App = (): React.JSX.Element => {
         return;
       }
 
-      const currentContents = serializeCurrentDocument();
-      const hasUnsavedChanges =
-        currentContents !== null &&
-        (baselineRef.current === null ||
-          currentContents !== baselineRef.current);
       const loadedDocument = { candidate, scene };
 
-      if (hasUnsavedChanges) {
-        setPendingDocument(loadedDocument);
+      if (hasUnsavedChanges()) {
+        setPendingAction({ type: "open", document: loadedDocument });
       } else {
         await commitLoadedDocument(loadedDocument);
       }
@@ -359,8 +391,8 @@ const App = (): React.JSX.Element => {
     [
       commitLoadedDocument,
       excalidrawAPI,
+      hasUnsavedChanges,
       labels.invalidDocument,
-      serializeCurrentDocument,
       showError
     ]
   );
@@ -370,7 +402,7 @@ const App = (): React.JSX.Element => {
       !excalidrawAPI ||
       !documentBaselineReady ||
       openingDocument ||
-      pendingDocument ||
+      pendingAction ||
       processedExternalOpenRevisionRef.current >= externalOpenRevision
     ) {
       return;
@@ -399,13 +431,13 @@ const App = (): React.JSX.Element => {
     externalOpenRevision,
     labels.documentError,
     openingDocument,
-    pendingDocument,
+    pendingAction,
     prepareCandidate,
     showError
   ]);
 
   const chooseAndOpenDocument = useCallback(async (): Promise<void> => {
-    if (openingDocument || pendingDocument) {
+    if (openingDocument || pendingAction) {
       return;
     }
     setOpeningDocument(true);
@@ -424,14 +456,14 @@ const App = (): React.JSX.Element => {
   }, [
     labels.documentError,
     openingDocument,
-    pendingDocument,
+    pendingAction,
     prepareCandidate,
     showError
   ]);
 
   const openRecentDocument = useCallback(
     async (document: RecentDocument): Promise<void> => {
-      if (openingDocument || pendingDocument) {
+      if (openingDocument || pendingAction) {
         return;
       }
       setRecentDialogOpen(false);
@@ -451,63 +483,74 @@ const App = (): React.JSX.Element => {
     [
       labels.documentError,
       openingDocument,
-      pendingDocument,
+      pendingAction,
       prepareCandidate,
       refreshRecentDocuments,
       showError
     ]
   );
 
-  const saveBeforeOpen = useCallback(async (): Promise<void> => {
-    if (!pendingDocument || confirmBusy) {
+  const completePendingAction = useCallback(
+    async (action: PendingDocumentAction): Promise<void> => {
+      if (action.type === "open") {
+        await commitLoadedDocument(action.document);
+      } else {
+        window.excalidrawDesktop.windowLifecycle.confirmClose();
+      }
+    },
+    [commitLoadedDocument]
+  );
+
+  const saveBeforePendingAction = useCallback(async (): Promise<void> => {
+    if (!pendingAction || confirmBusy) {
       return;
     }
     setConfirmBusy(true);
-    const documentToOpen = pendingDocument;
+    const actionToComplete = pendingAction;
     const saved = await saveCurrentDocument();
     if (!saved) {
-      setPendingDocument(null);
+      setPendingAction(null);
       setConfirmBusy(false);
       return;
     }
 
     try {
-      await commitLoadedDocument(documentToOpen);
+      await completePendingAction(actionToComplete);
     } catch (error) {
-      console.error("Could not finish opening the document", error);
+      console.error("Could not complete the pending document action", error);
       showError(labels.documentError);
-      setPendingDocument(null);
+      setPendingAction(null);
     } finally {
       setConfirmBusy(false);
     }
   }, [
-    commitLoadedDocument,
+    completePendingAction,
     confirmBusy,
     labels.documentError,
-    pendingDocument,
+    pendingAction,
     saveCurrentDocument,
     showError
   ]);
 
-  const discardBeforeOpen = useCallback(async (): Promise<void> => {
-    if (!pendingDocument || confirmBusy) {
+  const discardBeforePendingAction = useCallback(async (): Promise<void> => {
+    if (!pendingAction || confirmBusy) {
       return;
     }
     setConfirmBusy(true);
     try {
-      await commitLoadedDocument(pendingDocument);
+      await completePendingAction(pendingAction);
     } catch (error) {
-      console.error("Could not finish opening the document", error);
+      console.error("Could not complete the pending document action", error);
       showError(labels.documentError);
-      setPendingDocument(null);
+      setPendingAction(null);
     } finally {
       setConfirmBusy(false);
     }
   }, [
-    commitLoadedDocument,
+    completePendingAction,
     confirmBusy,
     labels.documentError,
-    pendingDocument,
+    pendingAction,
     showError
   ]);
 
@@ -517,7 +560,7 @@ const App = (): React.JSX.Element => {
         !(event.ctrlKey || event.metaKey) ||
         event.altKey ||
         event.shiftKey ||
-        pendingDocument ||
+        pendingAction ||
         recentDialogOpen
       ) {
         return;
@@ -538,7 +581,7 @@ const App = (): React.JSX.Element => {
     return () => window.removeEventListener("keydown", handleShortcut, true);
   }, [
     chooseAndOpenDocument,
-    pendingDocument,
+    pendingAction,
     recentDialogOpen,
     saveCurrentDocument
   ]);
@@ -605,14 +648,22 @@ const App = (): React.JSX.Element => {
         />
       )}
 
-      {pendingDocument && (
+      {pendingAction && (
         <SaveChangesDialog
           busy={confirmBusy}
-          documentName={activeDocument?.name ?? labels.untitled}
+          description={
+            pendingAction.type === "close"
+              ? labels.saveChangesBeforeCloseDescription(
+                  activeDocument?.name ?? labels.untitled
+                )
+              : labels.saveChangesBeforeOpenDescription(
+                  activeDocument?.name ?? labels.untitled
+                )
+          }
           labels={labels}
-          onCancel={() => setPendingDocument(null)}
-          onDontSave={() => void discardBeforeOpen()}
-          onSave={() => void saveBeforeOpen()}
+          onCancel={() => setPendingAction(null)}
+          onDontSave={() => void discardBeforePendingAction()}
+          onSave={() => void saveBeforePendingAction()}
         />
       )}
     </main>

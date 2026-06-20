@@ -1,5 +1,6 @@
 import type { LibraryItems } from "@excalidraw/excalidraw/types";
 import type { DocumentBridge } from "./documents";
+import type { WindowLifecycleBridge } from "./windowLifecycle";
 
 export const APP_CONFIG_DIRECTORY_NAME = "excalidraw--";
 export const LIBRARY_DATA_FILENAME = "libraries.json";
@@ -24,4 +25,5 @@ export type ExcalidrawDesktopBridge = {
     save: (data: LibraryPersistedData) => Promise<void>;
     onInstall: (callback: (hash: string) => void) => () => void;
   };
+  windowLifecycle: WindowLifecycleBridge;
 };

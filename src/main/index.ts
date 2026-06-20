@@ -15,9 +15,14 @@ import {
   type LibraryPersistedData
 } from "../shared/library";
 import { DOCUMENT_IPC_CHANNELS } from "../shared/documents";
+import { WINDOW_LIFECYCLE_IPC_CHANNELS } from "../shared/windowLifecycle";
 import { loadLibraryData, saveLibraryData } from "./libraryStore";
 import { registerDocumentIpc, resetDocumentSession } from "./documents";
 import { getExcalidrawPathFromArguments } from "./openFileRequest";
+import {
+  createWindowCloseGuard,
+  type WindowCloseGuard
+} from "./windowCloseGuard";
 
 app.setName("Excalidraw--");
 
@@ -27,6 +32,7 @@ app.setPath(
 );
 
 let mainWindow: BrowserWindow | null = null;
+let mainWindowCloseGuard: WindowCloseGuard | null = null;
 let pendingExternalOpenPath = getExcalidrawPathFromArguments(
   process.argv,
   process.cwd()
@@ -173,8 +179,15 @@ ipcMain.handle(
   }
 );
 
+ipcMain.on(WINDOW_LIFECYCLE_IPC_CHANNELS.confirmClose, (event) => {
+  if (!mainWindow || event.sender !== mainWindow.webContents) {
+    return;
+  }
+  mainWindowCloseGuard?.approveClose();
+});
+
 const createWindow = (): void => {
-  mainWindow = new BrowserWindow({
+  const createdWindow = new BrowserWindow({
     width: 1280,
     height: 900,
     minWidth: 900,
@@ -186,27 +199,48 @@ const createWindow = (): void => {
       contextIsolation: true
     }
   });
+  mainWindow = createdWindow;
 
-  interceptLibraryNavigation(mainWindow.webContents);
+  const closeGuard = createWindowCloseGuard({
+    requestCloseConfirmation: () => {
+      if (!createdWindow.isDestroyed()) {
+        createdWindow.webContents.send(
+          WINDOW_LIFECYCLE_IPC_CHANNELS.closeRequested
+        );
+      }
+    },
+    closeWindow: () => {
+      if (!createdWindow.isDestroyed()) {
+        createdWindow.close();
+      }
+    }
+  });
+  mainWindowCloseGuard = closeGuard;
+  createdWindow.on("close", closeGuard.handleClose);
 
-  mainWindow.webContents.on("did-create-window", (libraryWindow, details) => {
+  interceptLibraryNavigation(createdWindow.webContents);
+
+  createdWindow.webContents.on("did-create-window", (libraryWindow, details) => {
     if (isLibraryBrowserUrl(details.url)) {
       interceptLibraryNavigation(libraryWindow.webContents);
     }
   });
 
-  mainWindow.once("ready-to-show", () => {
-    mainWindow?.show();
+  createdWindow.once("ready-to-show", () => {
+    createdWindow.show();
   });
 
   if (process.env.ELECTRON_RENDERER_URL) {
-    void mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL);
+    void createdWindow.loadURL(process.env.ELECTRON_RENDERER_URL);
   } else {
-    void mainWindow.loadFile(join(__dirname, "../renderer/index.html"));
+    void createdWindow.loadFile(join(__dirname, "../renderer/index.html"));
   }
 
-  mainWindow.on("closed", () => {
-    mainWindow = null;
+  createdWindow.on("closed", () => {
+    if (mainWindow === createdWindow) {
+      mainWindow = null;
+      mainWindowCloseGuard = null;
+    }
     resetDocumentSession();
   });
 };

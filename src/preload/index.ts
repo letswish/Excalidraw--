@@ -9,6 +9,7 @@ import {
   type DocumentLanguage,
   type SaveDocumentRequest
 } from "../shared/documents";
+import { WINDOW_LIFECYCLE_IPC_CHANNELS } from "../shared/windowLifecycle";
 
 const bridge: ExcalidrawDesktopBridge = {
   documents: {
@@ -49,6 +50,21 @@ const bridge: ExcalidrawDesktopBridge = {
       return () => {
         ipcRenderer.removeListener(LIBRARY_IPC_CHANNELS.install, listener);
       };
+    }
+  },
+  windowLifecycle: {
+    onCloseRequested: (callback: () => void) => {
+      const listener = () => callback();
+      ipcRenderer.on(WINDOW_LIFECYCLE_IPC_CHANNELS.closeRequested, listener);
+      return () => {
+        ipcRenderer.removeListener(
+          WINDOW_LIFECYCLE_IPC_CHANNELS.closeRequested,
+          listener
+        );
+      };
+    },
+    confirmClose: () => {
+      ipcRenderer.send(WINDOW_LIFECYCLE_IPC_CHANNELS.confirmClose);
     }
   }
 };
