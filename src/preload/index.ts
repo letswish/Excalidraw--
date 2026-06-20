@@ -17,6 +17,18 @@ const bridge: ExcalidrawDesktopBridge = {
       ipcRenderer.invoke(DOCUMENT_IPC_CHANNELS.chooseOpen, language),
     readRecent: (path: string) =>
       ipcRenderer.invoke(DOCUMENT_IPC_CHANNELS.readRecent, path),
+    consumeExternalOpen: () =>
+      ipcRenderer.invoke(DOCUMENT_IPC_CHANNELS.consumeExternalOpen),
+    onExternalOpenRequested: (callback: () => void) => {
+      const listener = () => callback();
+      ipcRenderer.on(DOCUMENT_IPC_CHANNELS.externalOpenRequested, listener);
+      return () => {
+        ipcRenderer.removeListener(
+          DOCUMENT_IPC_CHANNELS.externalOpenRequested,
+          listener
+        );
+      };
+    },
     commitOpen: (candidateId: string) =>
       ipcRenderer.invoke(DOCUMENT_IPC_CHANNELS.commitOpen, candidateId),
     save: (request: SaveDocumentRequest) =>

@@ -119,7 +119,8 @@ const assertMainRenderer = (
 };
 
 export const registerDocumentIpc = (
-  getMainWindow: () => BrowserWindow | null
+  getMainWindow: () => BrowserWindow | null,
+  takeExternalOpenPath: () => string | null
 ): void => {
   ipcMain.handle(DOCUMENT_IPC_CHANNELS.listRecent, async (event) => {
     assertMainRenderer(event, getMainWindow);
@@ -163,6 +164,12 @@ export const registerDocumentIpc = (
       return createCandidate(filePath);
     }
   );
+
+  ipcMain.handle(DOCUMENT_IPC_CHANNELS.consumeExternalOpen, async (event) => {
+    assertMainRenderer(event, getMainWindow);
+    const filePath = takeExternalOpenPath();
+    return filePath ? createCandidate(filePath) : null;
+  });
 
   ipcMain.handle(
     DOCUMENT_IPC_CHANNELS.commitOpen,

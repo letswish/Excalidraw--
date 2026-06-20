@@ -5,6 +5,8 @@ export const DOCUMENT_IPC_CHANNELS = {
   listRecent: "documents:list-recent",
   chooseOpen: "documents:choose-open",
   readRecent: "documents:read-recent",
+  consumeExternalOpen: "documents:consume-external-open",
+  externalOpenRequested: "documents:external-open-requested",
   commitOpen: "documents:commit-open",
   save: "documents:save"
 } as const;
@@ -45,6 +47,8 @@ export type DocumentBridge = {
     language: DocumentLanguage
   ) => Promise<DocumentCandidate | null>;
   readRecent: (path: string) => Promise<DocumentCandidate>;
+  consumeExternalOpen: () => Promise<DocumentCandidate | null>;
+  onExternalOpenRequested: (callback: () => void) => () => void;
   commitOpen: (candidateId: string) => Promise<RecentDocument>;
   save: (request: SaveDocumentRequest) => Promise<SaveDocumentResult>;
 };

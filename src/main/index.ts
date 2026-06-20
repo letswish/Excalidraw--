@@ -14,8 +14,12 @@ import {
   LIBRARY_RETURN_URL,
   type LibraryPersistedData
 } from "../shared/library";
+import { DOCUMENT_IPC_CHANNELS } from "../shared/documents";
 import { loadLibraryData, saveLibraryData } from "./libraryStore";
 import { registerDocumentIpc, resetDocumentSession } from "./documents";
+import { getExcalidrawPathFromArguments } from "./openFileRequest";
+
+app.setName("Excalidraw--");
 
 app.setPath(
   "userData",
@@ -23,8 +27,18 @@ app.setPath(
 );
 
 let mainWindow: BrowserWindow | null = null;
+let pendingExternalOpenPath = getExcalidrawPathFromArguments(
+  process.argv,
+  process.cwd()
+);
 
-registerDocumentIpc(() => mainWindow);
+const takeExternalOpenPath = (): string | null => {
+  const filePath = pendingExternalOpenPath;
+  pendingExternalOpenPath = null;
+  return filePath;
+};
+
+registerDocumentIpc(() => mainWindow, takeExternalOpenPath);
 
 const libraryReturnUrl = new URL(LIBRARY_RETURN_URL);
 
@@ -74,6 +88,36 @@ const forwardLibraryInstall = (url: string): boolean => {
   }
   mainWindow.show();
   mainWindow.focus();
+  return true;
+};
+
+const focusMainWindow = (): void => {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+  if (mainWindow.isMinimized()) {
+    mainWindow.restore();
+  }
+  mainWindow.show();
+  mainWindow.focus();
+};
+
+const queueExternalOpen = (
+  commandLine: readonly string[],
+  workingDirectory: string
+): boolean => {
+  const filePath = getExcalidrawPathFromArguments(
+    commandLine,
+    workingDirectory
+  );
+  if (!filePath) {
+    return false;
+  }
+
+  pendingExternalOpenPath = filePath;
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send(DOCUMENT_IPC_CHANNELS.externalOpenRequested);
+  }
   return true;
 };
 
@@ -167,16 +211,27 @@ const createWindow = (): void => {
   });
 };
 
-app.whenReady().then(() => {
-  Menu.setApplicationMenu(null);
-  createWindow();
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
 
-  app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
-    }
+if (!hasSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on("second-instance", (_event, commandLine, workingDirectory) => {
+    queueExternalOpen(commandLine, workingDirectory);
+    focusMainWindow();
   });
-});
+
+  app.whenReady().then(() => {
+    Menu.setApplicationMenu(null);
+    createWindow();
+
+    app.on("activate", () => {
+      if (BrowserWindow.getAllWindows().length === 0) {
+        createWindow();
+      }
+    });
+  });
+}
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {

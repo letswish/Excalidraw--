@@ -1,0 +1,32 @@
+appId: com.excalidraw.desktop
+productName: Excalidraw--
+asar: true
+
+directories:
+  output: release
+
+files:
+  - out/**/*
+  - package.json
+  - "!node_modules/**/*"
+
+fileAssociations:
+  - ext: excalidraw
+    name: Excalidraw Document
+    description: Excalidraw drawing file
+    mimeType: application/vnd.excalidraw+json
+
+linux:
+  target:
+    - deb
+  category: Graphics
+  executableName: excalidraw--
+  syncDesktopName: true
+  executableArgs:
+    - "%f"
+
+deb:
+  packageName: excalidraw-desktop
+  maintainer: gbu <zhaobutter@gmail.com>
+  synopsis: Excalidraw desktop application
+  artifactName: ${name}-${version}-${arch}.${ext}

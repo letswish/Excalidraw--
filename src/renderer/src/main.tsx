@@ -181,8 +181,11 @@ const App = (): React.JSX.Element => {
     useState<LoadedDocument | null>(null);
   const [openingDocument, setOpeningDocument] = useState(false);
   const [confirmBusy, setConfirmBusy] = useState(false);
+  const [documentBaselineReady, setDocumentBaselineReady] = useState(false);
+  const [externalOpenRevision, setExternalOpenRevision] = useState(0);
   const baselineRef = useRef<string | null>(null);
   const awaitingBaselineRef = useRef(true);
+  const processedExternalOpenRevisionRef = useRef(0);
   const labels = useMemo(() => getLabels(APP_LANGUAGE), []);
 
   useHandleLibrary({
@@ -224,6 +227,15 @@ const App = (): React.JSX.Element => {
     });
   }, []);
 
+  useEffect(() => {
+    const unsubscribe =
+      window.excalidrawDesktop.documents.onExternalOpenRequested(() => {
+        setExternalOpenRevision((revision) => revision + 1);
+      });
+    setExternalOpenRevision((revision) => revision + 1);
+    return unsubscribe;
+  }, []);
+
   const handleChange = useCallback<NonNullable<ExcalidrawProps["onChange"]>>(
     (elements, appState, files) => {
       if (awaitingBaselineRef.current || baselineRef.current === null) {
@@ -234,6 +246,7 @@ const App = (): React.JSX.Element => {
           "local"
         );
         awaitingBaselineRef.current = false;
+        setDocumentBaselineReady(true);
       }
     },
     []
@@ -296,6 +309,7 @@ const App = (): React.JSX.Element => {
 
       awaitingBaselineRef.current = true;
       baselineRef.current = null;
+      setDocumentBaselineReady(false);
       setInitialData(scene);
       setEditorKey((key) => key + 1);
       setActiveDocument(document);
@@ -350,6 +364,45 @@ const App = (): React.JSX.Element => {
       showError
     ]
   );
+
+  useEffect(() => {
+    if (
+      !excalidrawAPI ||
+      !documentBaselineReady ||
+      openingDocument ||
+      pendingDocument ||
+      processedExternalOpenRevisionRef.current >= externalOpenRevision
+    ) {
+      return;
+    }
+
+    processedExternalOpenRevisionRef.current = externalOpenRevision;
+    setOpeningDocument(true);
+
+    void (async () => {
+      try {
+        const candidate =
+          await window.excalidrawDesktop.documents.consumeExternalOpen();
+        if (candidate) {
+          await prepareCandidate(candidate);
+        }
+      } catch (error) {
+        console.error("Could not open an externally requested document", error);
+        showError(labels.documentError);
+      } finally {
+        setOpeningDocument(false);
+      }
+    })();
+  }, [
+    documentBaselineReady,
+    excalidrawAPI,
+    externalOpenRevision,
+    labels.documentError,
+    openingDocument,
+    pendingDocument,
+    prepareCandidate,
+    showError
+  ]);
 
   const chooseAndOpenDocument = useCallback(async (): Promise<void> => {
     if (openingDocument || pendingDocument) {

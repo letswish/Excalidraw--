@@ -65,3 +65,28 @@
 - **Verification:** `npm run build` passed. A production Electron DOM smoke test
   confirmed the canvas, custom Open/Save/Recent menu entries, recent-files
   dialog mounting and focus, and resolved Excalidraw background/radius tokens.
+
+## Ubuntu `.excalidraw` file association
+
+- **Affected modules:** the Electron main/preload document integration,
+  `src/renderer/src/main.tsx`, and `electron-builder.yml`.
+- **Reason:** Linux desktop file activation supplies a path on the application
+  command line, outside Excalidraw's browser-oriented file picker workflow.
+- **Upstream surface:** Excalidraw's `.excalidraw` extension,
+  `application/vnd.excalidraw+json` MIME type, `loadFromBlob`, and the scene
+  candidate/commit flow described above.
+- **Local behavior:** the Debian package installs shared-mime-info and desktop
+  entries with a single-file `%f` argument. Electron keeps one application
+  instance, normalizes cold-start and `second-instance` file arguments, and
+  lets the renderer consume the latest pending path only when its document
+  baseline and save-before-open UI are ready. Existing user MIME defaults are
+  not overwritten.
+- **Upgrade risk:** future Excalidraw versions may change the canonical MIME
+  type, extension, or accepted file data shape. Electron or electron-builder
+  upgrades may change Linux argument delivery, desktop metadata, or generated
+  Debian maintainer scripts.
+- **Verification:** `npm test`, `npm run build`, and x64 Debian packaging passed.
+  The unpacked package's MIME XML, `%f` desktop entry, desktop validation, and
+  MIME/desktop cache hooks were checked. Headless packaged-app smoke tests
+  opened a valid path containing spaces and Chinese characters on cold start
+  and through an existing instance, with both opens recorded in recent files.
